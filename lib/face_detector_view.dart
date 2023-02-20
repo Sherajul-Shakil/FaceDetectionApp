@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 class FaceDetectorView extends StatefulWidget {
@@ -52,19 +53,46 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
     });
     final pickedFile = await _imagePicker?.pickImage(
       source: ImageSource.camera,
-      // imageQuality: 100,
+      imageQuality: 100,
       preferredCameraDevice: CameraDevice.front,
+      // maxWidth: 413,
+      // maxHeight: 531,
     );
     if (pickedFile != null) {
-      _inputImage = await _processPickedFile(pickedFile);
-      // log("inputImage: $_inputImage");
+      _cropImage(imagePath: pickedFile);
+    }
+  }
+
+  void _cropImage({required XFile imagePath}) async {
+    CroppedFile? croppedFile = await ImageCropper().cropImage(
+      sourcePath: imagePath.path,
+      aspectRatio: const CropAspectRatio(ratioX: 4, ratioY: 5),
+      uiSettings: [
+        AndroidUiSettings(
+            toolbarTitle: 'Crop Image',
+            toolbarColor: Colors.blue,
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.original,
+            lockAspectRatio: true),
+        IOSUiSettings(
+          title: 'Crop Image',
+        ),
+        WebUiSettings(
+          context: context,
+        ),
+      ],
+    );
+
+    if (croppedFile != null) {
+      _inputImage = await _processPickedFile(pickedFile: croppedFile.path);
+
       processImage(_inputImage!);
     }
     setState(() {});
   }
 
-  Future<InputImage> _processPickedFile(XFile? pickedFile) async {
-    final path = pickedFile?.path;
+  Future<InputImage> _processPickedFile({required String pickedFile}) async {
+    final path = pickedFile;
     if (path == null) {
       return InputImage.fromFilePath('');
     }
@@ -99,15 +127,20 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
 
         var leftEar = face.landmarks[FaceLandmarkType.leftEar];
         var rightEar = face.landmarks[FaceLandmarkType.rightEar];
+        var leftEye = face.landmarks[FaceLandmarkType.leftEye];
+        var rightEye = face.landmarks[FaceLandmarkType.rightEye];
 
         var leftEarPos = leftEar!.position.y;
         var rightEarPos = rightEar!.position.y;
+        var leftEyePos = leftEye!.position.y;
+        var rightEyePos = rightEye!.position.y;
+
+        // log("leftEarPos: $leftEarPos rightEarPos: $rightEarPos");
+        log("leftEyePos: $leftEyePos rightEyePos: $rightEyePos");
 
         if (face.rightEyeOpenProbability != null &&
             face.leftEyeOpenProbability != null &&
-            leftEarPos != null &&
-            rightEarPos != null &&
-            (leftEarPos - rightEarPos).abs() <= 10) {
+            (leftEyePos - rightEyePos).abs() <= 15) {
           setState(() {
             isSuccess = (face.rightEyeOpenProbability! > 0.98 &&
                 face.leftEyeOpenProbability! > 0.98 &&
