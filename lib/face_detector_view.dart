@@ -30,7 +30,9 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
   ImagePicker? _imagePicker;
   InputImage? _inputImage;
   bool? isSuccess;
-  int faceCount = 2;
+  int faceCount = 9;
+  double eyeCenter = 1250.0;
+  bool isLoading = false;
 
   @override
   void initState() {
@@ -50,16 +52,19 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
     setState(() {
       _image = null;
       _path = null;
+      isLoading = true;
     });
-    final pickedFile = await _imagePicker?.pickImage(
-      source: ImageSource.camera,
-      imageQuality: 100,
-      preferredCameraDevice: CameraDevice.front,
-      // maxWidth: 413,
-      // maxHeight: 531,
-    );
-    if (pickedFile != null) {
-      _cropImage(imagePath: pickedFile);
+    try {
+      final pickedFile = await _imagePicker?.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 100,
+        preferredCameraDevice: CameraDevice.front,
+      );
+      if (pickedFile != null) {
+        _cropImage(imagePath: pickedFile);
+      }
+    } catch (e) {
+      print("Error from camera: $e");
     }
   }
 
@@ -134,13 +139,21 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
         var rightEarPos = rightEar!.position.y;
         var leftEyePos = leftEye!.position.y;
         var rightEyePos = rightEye!.position.y;
+        var leftEyePosX = leftEye.position.x;
+        var rightEyePosX = rightEye.position.x;
+        setState(() {
+          eyeCenter = (leftEyePosX + rightEyePosX) / 2;
+        });
 
-        // log("leftEarPos: $leftEarPos rightEarPos: $rightEarPos");
-        log("leftEyePos: $leftEyePos rightEyePos: $rightEyePos");
+        log("leftEyePosY: $leftEyePos rightEyePosY: $rightEyePos");
+        log("leftEyePosX: $leftEyePosX rightEyePosX: $rightEyePosX");
+        log("Center: $eyeCenter");
 
         if (face.rightEyeOpenProbability != null &&
             face.leftEyeOpenProbability != null &&
-            (leftEyePos - rightEyePos).abs() <= 15) {
+            (leftEyePos - rightEyePos).abs() <= 15 &&
+            eyeCenter >= 1100 &&
+            eyeCenter <= 1400) {
           setState(() {
             isSuccess = (face.rightEyeOpenProbability! > 0.98 &&
                 face.leftEyeOpenProbability! > 0.98 &&
@@ -149,12 +162,21 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
           });
 
           log("isSuccesssssssssssssssssssssssssssssss: $isSuccess");
+        } else if (eyeCenter <= 1100 || eyeCenter >= 1400) {
+          setState(() {
+            isSuccess = false;
+          });
+          log("isSuccesssssssssssssssssssssssssssssss: $isSuccess");
         } else {
           setState(() {
             isSuccess = false;
           });
           log("isSuccesssssssssssssssssssssssssssssss: $isSuccess");
         }
+
+        setState(() {
+          isLoading = false;
+        });
       }
       _text = text;
       // TODO: set _customPaint to draw boundingRect on top of image
@@ -193,19 +215,55 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
                   Icons.image,
                   size: 200,
                 ),
+          const SizedBox(
+            height: 20,
+          ),
           ElevatedButton(
               onPressed: () {
                 _getImage();
               },
               child: const Text("Take a picture")),
-          if (isSuccess == true && faceCount == 1)
-            const Text("Image is Valid")
-          else if (isSuccess == false)
-            const Text("Image is not Valid")
-          else if (faceCount < 1)
-            const Text("No face detected")
-          else
-            const Text(""),
+          const SizedBox(
+            height: 20,
+          ),
+          isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.5),
+                        spreadRadius: 5,
+                        blurRadius: 7,
+                        offset:
+                            const Offset(0, 3), // changes position of shadow
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      if (isSuccess == true && faceCount == 1)
+                        const Text("Image is Valid",
+                            style: TextStyle(color: Colors.green, fontSize: 15))
+                      else if (eyeCenter <= 1100 ||
+                          eyeCenter >= 1400 && faceCount == 1)
+                        const Text("Keep your face in the center of the screen",
+                            style: TextStyle(color: Colors.red, fontSize: 15))
+                      else if (isSuccess == false)
+                        const Text("Image is not Valid",
+                            style: TextStyle(color: Colors.red, fontSize: 15))
+                      else if (faceCount < 1)
+                        const Text("No face detected",
+                            style: TextStyle(color: Colors.red, fontSize: 15))
+                      else
+                        const Text(""),
+                    ],
+                  ),
+                ),
         ],
       ),
     ));
