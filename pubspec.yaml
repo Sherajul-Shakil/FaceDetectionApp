@@ -16,6 +16,7 @@ dependencies:
   google_mlkit_face_detection: ^0.5.0
   image_picker: ^0.8.6+2
   image_cropper: ^3.0.1
+  rename: ^2.1.1
 
 dev_dependencies:
   flutter_test:

@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.google_mlkit_face_detection_exam">
    <application
-        android:label="google_mlkit_face_detection_exam"
+        android:label="Face Validator"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

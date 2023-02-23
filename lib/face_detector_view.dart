@@ -1,8 +1,10 @@
 import 'dart:developer';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:google_mlkit_face_detection_exam/mgsString.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -33,6 +35,7 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
   int faceCount = 9;
   double eyeCenter = 1250.0;
   bool isLoading = false;
+  int resultIndex = 9;
 
   @override
   void initState() {
@@ -65,6 +68,7 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
       }
     } catch (e) {
       print("Error from camera: $e");
+      isLoading = false;
     }
   }
 
@@ -92,6 +96,7 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
       _inputImage = await _processPickedFile(pickedFile: croppedFile.path);
 
       processImage(_inputImage!);
+      // removeBgImage(_inputImage!);
     }
     setState(() {});
   }
@@ -123,8 +128,14 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
       log("inputImage.inputImageData!.size: ${inputImage.inputImageData!.size}");
     } else {
       String text = 'Faces found: ${faces.length}\n\n';
+
       setState(() {
         faceCount = faces.length;
+        if (faceCount == 0) {
+          isSuccess = false;
+          resultIndex = 5;
+          isLoading = false;
+        }
       });
 
       for (final face in faces) {
@@ -134,6 +145,8 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
         var rightEar = face.landmarks[FaceLandmarkType.rightEar];
         var leftEye = face.landmarks[FaceLandmarkType.leftEye];
         var rightEye = face.landmarks[FaceLandmarkType.rightEye];
+        var mouth = face.landmarks[FaceLandmarkType.bottomMouth];
+        log("mouth : ${mouth!.position.distanceTo(math.Point(0, 0))}");
 
         var leftEarPos = leftEar!.position.y;
         var rightEarPos = rightEar!.position.y;
@@ -147,32 +160,73 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
 
         log("leftEyePosY: $leftEyePos rightEyePosY: $rightEyePos");
         log("leftEyePosX: $leftEyePosX rightEyePosX: $rightEyePosX");
+        log("face.leftEyeOpenProbability ${face.leftEyeOpenProbability} rightEyeOpenProbability: ${face.rightEyeOpenProbability}");
         log("Center: $eyeCenter");
+        log("face.headEulerAngleY: ${face.headEulerAngleY}");
 
-        if (face.rightEyeOpenProbability != null &&
-            face.leftEyeOpenProbability != null &&
+        if (face.rightEyeOpenProbability! > 0.98 &&
+            face.leftEyeOpenProbability! > 0.98 &&
+            face.headEulerAngleY! >= -3 &&
+            face.headEulerAngleY! <= 3 &&
             (leftEyePos - rightEyePos).abs() <= 15 &&
             eyeCenter >= 1100 &&
             eyeCenter <= 1400) {
           setState(() {
-            isSuccess = (face.rightEyeOpenProbability! > 0.98 &&
-                face.leftEyeOpenProbability! > 0.98 &&
-                face.headEulerAngleY! >= -2 &&
-                face.headEulerAngleY! <= 2);
+            isSuccess = true;
+            resultIndex = 0;
+            isLoading = false;
           });
-
-          log("isSuccesssssssssssssssssssssssssssssss: $isSuccess");
-        } else if (eyeCenter <= 1100 || eyeCenter >= 1400) {
+        } else if (face.rightEyeOpenProbability! < 0.98 &&
+            face.leftEyeOpenProbability! > 0.95) {
           setState(() {
             isSuccess = false;
+            resultIndex = 2;
           });
-          log("isSuccesssssssssssssssssssssssssssssss: $isSuccess");
+        } else if (face.leftEyeOpenProbability! < 0.98 &&
+            face.rightEyeOpenProbability! > 0.98) {
+          setState(() {
+            isSuccess = false;
+            resultIndex = 3;
+          });
+        } else if (face.leftEyeOpenProbability! < 0.98 &&
+            face.rightEyeOpenProbability! < 0.98) {
+          setState(() {
+            isSuccess = false;
+            resultIndex = 8;
+          });
+        } else if (faceCount == 0) {
+          setState(() {
+            isSuccess = false;
+            resultIndex = 5;
+          });
+        } else if (faceCount > 1) {
+          setState(() {
+            isSuccess = false;
+            resultIndex = 6;
+          });
+        }
+        // else if (
+        //     // mouth.position
+        //     //Compare Point<int> with static const Point<int>
+        //     mouth.position == math.Point<int>(0, 0)) {
+        //   setState(() {
+        //     isSuccess = false;
+        //     resultIndex = 4;
+        //   });
+        // }
+        else if (eyeCenter <= 1100 || eyeCenter >= 1400) {
+          setState(() {
+            isSuccess = false;
+            resultIndex = 7;
+          });
         } else {
           setState(() {
             isSuccess = false;
+            resultIndex = 1;
+            log("Else called");
           });
-          log("isSuccesssssssssssssssssssssssssssssss: $isSuccess");
         }
+        // log("isSuccesssssssssssssssssssssssssssssss: $isSuccess index: $resultIndex");
 
         setState(() {
           isLoading = false;
@@ -190,7 +244,7 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
 
   @override
   Widget build(BuildContext context) {
-    log("hhhhhhhhhhhhhhhhhhhhhhhhh $faceCount $isSuccess");
+    log("From build Face count: $faceCount isSuccess: $isSuccess resultIndex: $resultIndex");
     return Scaffold(
         body: Container(
       height: MediaQuery.of(context).size.height,
@@ -228,42 +282,26 @@ class _FaceDetectorViewState extends State<FaceDetectorView> {
           ),
           isLoading
               ? const Center(child: CircularProgressIndicator())
-              : Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.5),
-                        spreadRadius: 5,
-                        blurRadius: 7,
-                        offset:
-                            const Offset(0, 3), // changes position of shadow
+              : _image != null && resultIndex < 9
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.5),
+                            spreadRadius: 5,
+                            blurRadius: 7,
+                            offset: const Offset(
+                                0, 3), // changes position of shadow
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      if (isSuccess == true && faceCount == 1)
-                        const Text("Image is Valid",
-                            style: TextStyle(color: Colors.green, fontSize: 15))
-                      else if (eyeCenter <= 1100 ||
-                          eyeCenter >= 1400 && faceCount == 1)
-                        const Text("Keep your face in the center of the screen",
-                            style: TextStyle(color: Colors.red, fontSize: 15))
-                      else if (isSuccess == false)
-                        const Text("Image is not Valid",
-                            style: TextStyle(color: Colors.red, fontSize: 15))
-                      else if (faceCount < 1)
-                        const Text("No face detected",
-                            style: TextStyle(color: Colors.red, fontSize: 15))
-                      else
-                        const Text(""),
-                    ],
-                  ),
-                ),
+                      child: Text(EtpString.resultIndex[resultIndex]),
+                    )
+                  : const Text(""),
         ],
       ),
     ));
